@@ -70,6 +70,14 @@ def scrape_lakes():
             "outflow": outflow,
             "percentUtil": percent_util,
         })
+    # --- Add Lake Cumberland from Wolf Creek page ---
+    try:
+        wol = scrape_wolf_creek_cumberland()
+        if wol and not any(l.get("project") == "Lake Cumberland" for l in lakes):
+            lakes.append(wol)
+    except Exception as e:
+        # Don't break whole response if Cumberland page fails
+        print("Wolf Creek scrape failed:", e)
 
     return {
         "error": False,
