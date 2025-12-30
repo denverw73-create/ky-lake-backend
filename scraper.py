@@ -76,3 +76,66 @@ def scrape_lakes():
         "timestamp": datetime.utcnow().isoformat(),
         "lakes": lakes
     }
+import re
+import requests
+from bs4 import BeautifulSoup
+
+WOL_URL = "https://www.lrn-wc.usace.army.mil/basin_project.shtml?p=wol"
+
+def _to_float(s):
+    try:
+        return float(str(s).replace(",", "").strip())
+    except:
+        return None
+
+def _find_first_number_in_text(text, label):
+    """
+    Looks for a line containing label and returns the first number on that line.
+    """
+    for line in text.splitlines():
+        if label.lower() in line.lower():
+            m = re.search(r"(-?\d+(?:\.\d+)?)", line.replace(",", ""))
+            if m:
+                return _to_float(m.group(1))
+    return None
+
+def scrape_wolf_creek_cumberland():
+    """
+    Scrapes Wolf Creek (Lake Cumberland) from the LRN-WC basin_project page.
+    Returns one lake object in the SAME SHAPE your app uses.
+    """
+    resp = requests.get(WOL_URL, headers=HEADERS, timeout=12)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Get all text (robust against layout changes)
+    text = soup.get_text("\n", strip=True)
+
+    # These labels may vary slightly — adjust if needed after first run
+    pool = _find_first_number_in_text(text, "Pool Elevation")
+    inflow = _find_first_number_in_text(text, "Inflow")
+    outflow = _find_first_number_in_text(text, "Outflow")
+    total_flow = _find_first_number_in_text(text, "Total Flow")
+
+    # Some pages report kcfs; if you see small numbers like 12.3, it might be kcfs.
+    # If values are under ~200, assume kcfs and convert to cfs.
+    def maybe_kcfs_to_cfs(v):
+        if v is None:
+            return None
+        return v * 1000 if v < 200 else v
+
+    inflow_cfs = maybe_kcfs_to_cfs(inflow)
+    outflow_cfs = maybe_kcfs_to_cfs(outflow if outflow is not None else total_flow)
+
+    return {
+        "basin": "Cumberland",
+        "project": "Lake Cumberland",
+        "todayPool": pool,
+        "deviation": None,
+        "change24h": None,
+        "precip24h": None,
+        "inflow": inflow_cfs,
+        "outflow": outflow_cfs,
+        "percentUtil": None,
+    }
