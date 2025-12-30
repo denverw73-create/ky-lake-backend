@@ -6,6 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from scraper import scrape_lakes
+from flask import Flask, jsonify
+from scraper import scrape_lakes
+
+app = Flask(__name__)
+
+@app.get("/lakes")
+def lakes():
+    data = scrape_lakes()
+    return jsonify(data)
 
 STORAGE_FILE = "storage.json"
 
