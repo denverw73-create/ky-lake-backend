@@ -1,30 +1,29 @@
+# main.py
 import json
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from scraper import scrape_lakes
 
 STORAGE_FILE = "storage.json"
-CACHE_MAX_AGE_HOURS = int(os.getenv("CACHE_MAX_AGE_HOURS", "2"))
+CACHE_HOURS = 2
 
-app = FastAPI(title="KY Lake Levels API")
+app = FastAPI(title="Anchor Point API")
 
-# Allow your frontend to call this backend
+# Allow your frontend to call this from anywhere
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # lock down later if you want
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
-def load_storage() -> Optional[Dict[str, Any]]:
+def load_storage() -> Dict[str, Any] | None:
     if not os.path.exists(STORAGE_FILE):
         return None
     try:
@@ -33,87 +32,67 @@ def load_storage() -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
+
 def save_storage(data: Dict[str, Any]) -> None:
     with open(STORAGE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def parse_timestamp(ts: str) -> Optional[datetime]:
-    """
-    Accepts ISO timestamps like:
-      2025-12-30T12:34:56
-      2025-12-30T12:34:56Z
-      2025-12-30T12:34:56+00:00
-    """
-    if not ts or not isinstance(ts, str):
-        return None
+
+def is_cache_fresh(saved: Dict[str, Any]) -> bool:
     try:
-        if ts.endswith("Z"):
-            ts = ts[:-1] + "+00:00"
-        dt = datetime.fromisoformat(ts)
-        # If naive, assume UTC
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+        ts = saved.get("timestamp")
+        if not ts:
+            return False
+        saved_time = datetime.fromisoformat(ts)
+        return (datetime.utcnow() - saved_time) < timedelta(hours=CACHE_HOURS)
     except Exception:
-        return None
+        return False
+
 
 @app.get("/")
 def root():
     return {
-        "message": "KY Lake Levels API is running",
-        "endpoints": ["/lakes", "/refresh", "/health"],
+        "message": "Anchor Point API is running",
+        "endpoints": ["/lakes", "/refresh"],
+        "cache_hours": CACHE_HOURS,
     }
 
-@app.get("/health")
-def health():
-    return {"ok": True, "time": utc_now().isoformat()}
 
 @app.get("/lakes")
 def get_lakes():
     """
-    Get current lake data, using cache if newer than CACHE_MAX_AGE_HOURS.
+    Returns lake data.
+    Uses cached data if it's newer than CACHE_HOURS.
+    Falls back to stale cache if scrape fails.
     """
     saved = load_storage()
 
-    # Use cache if fresh
-    if saved and isinstance(saved, dict):
-        saved_time = parse_timestamp(saved.get("timestamp", ""))
-        if saved_time:
-            age = utc_now() - saved_time
-            if age < timedelta(hours=CACHE_MAX_AGE_HOURS):
-                return {"source": "cached", **saved}
+    # Return fresh cache if available
+    if saved and is_cache_fresh(saved):
+        return {"source": "cached", **saved}
 
     # Otherwise scrape fresh
     result = scrape_lakes()
 
-    # If scraper failed, fall back to cache if available
-    if isinstance(result, dict) and result.get("error"):
-        if saved and isinstance(saved, dict):
+    # If scrape fails, fall back to any cache we have
+    if result.get("error"):
+        if saved:
             return {"source": "cached", **saved, "warning": result.get("message", "Scrape failed")}
-        raise HTTPException(status_code=502, detail=result.get("message", "Scrape failed"))
+        return {"source": "error", **result}
 
-    # Ensure timestamp exists (frontend expects it)
-    if isinstance(result, dict) and "timestamp" not in result:
-        result["timestamp"] = utc_now().isoformat()
-
+    # Save new data + return
     save_storage(result)
     return {"source": "fresh", **result}
+
 
 @app.get("/refresh")
 def refresh():
     """
-    Force a fresh scrape and update cache.
+    Forces a fresh scrape and updates cache.
     """
     result = scrape_lakes()
-
-    if not isinstance(result, dict):
-        raise HTTPException(status_code=502, detail="Scraper returned unexpected format")
-
     if result.get("error"):
-        raise HTTPException(status_code=502, detail=result.get("message", "Scrape failed"))
-
-    if "timestamp" not in result:
-        result["timestamp"] = utc_now().isoformat()
+        return {"source": "error", **result}
 
     save_storage(result)
     return {"source": "fresh", **result}
