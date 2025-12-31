@@ -43,8 +43,8 @@ def is_cache_fresh(saved: Dict[str, Any]) -> bool:
         ts = saved.get("timestamp")
         if not ts:
             return False
-        saved_time = datetime.fromisoformat(ts)
-        return (datetime.utcnow() - saved_time) < timedelta(hours=CACHE_HOURS)
+        saved_time = date.fromisoformat(ts)
+        return (date.utcnow() - saved_time) < timedelta(hours=CACHE_HOURS)
     except Exception:
         return False
 
