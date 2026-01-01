@@ -14,6 +14,8 @@ CACHE_HOURS = 2
 
 app = FastAPI(title="Anchor Point API")
 
+VISITS_FILE = "visits.json"
+
 # Allow your frontend to call this from anywhere
 app.add_middleware(
     CORSMiddleware,
@@ -107,3 +109,17 @@ def load_visits():
             return data
     except Exception:
         return {"count": 1000}
+        def save_visits(data: Dict[str, Any]) -> None:
+    with open(VISITS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def increment_visits() -> int:
+    data = load_visits()
+    data["count"] = int(data.get("count", 1000)) + 1
+    save_visits(data)
+    return data["count"]
+@app.get("/visits")
+def visits():
+    count = increment_visits()
+    return {"count": count}
+
