@@ -96,3 +96,14 @@ def refresh():
 
     save_storage(result)
     return {"source": "fresh", **result}
+def load_visits():
+    if not os.path.exists(VISITS_FILE):
+        return {"count": 1000}  # start at 1k
+    try:
+        with open(VISITS_FILE, "r") as f:
+            data = json.load(f)
+            if "count" not in data:
+                data["count"] = 1000
+            return data
+    except Exception:
+        return {"count": 1000}
