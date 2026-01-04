@@ -190,3 +190,12 @@ def visits_count():
     Useful for testing / admin display.
     """
     return load_visits()
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__)
+
+CORS(app, origins=[
+    "https://anchorpointfishing.com",
+    "https://www.anchorpointfishing.com"
+])
