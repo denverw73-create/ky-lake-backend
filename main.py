@@ -185,17 +185,23 @@ def visits():
 
 @app.get("/visits/count")
 def visits_count():
+     return load_visits()
     """
     Returns the counter WITHOUT incrementing.
     Useful for testing / admin display.
     """
     return load_visits()
-from flask import Flask
-from flask_cors import CORS
+from fastapi.middleware.cors import CORSMiddleware
 
-app = Flask(__name__)
-
-CORS(app, origins=[
-    "https://anchorpointfishing.com",
-    "https://www.anchorpointfishing.com"
-])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://anchorpointfishing.com",
+        "https://www.anchorpointfishing.com",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
