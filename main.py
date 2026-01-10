@@ -3,10 +3,10 @@ import json
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Any, Dict
+from threading import Lock
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from threading import Lock
 
 from scraper import scrape_lakes
 
@@ -24,11 +24,24 @@ VISITS_START = 1000
 storage_lock = Lock()
 visits_lock = Lock()
 
+# -----------------------------
+# App + CORS
+# -----------------------------
 app = FastAPI(title="Anchor Point API")
 
+# NOTE: Keep ONE CORS block only.
+# If you want fully-open access, you can change allow_origins to ["*"]
+# and set allow_credentials=False. For GoDaddy + safety, keep it restricted.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://anchorpointfishing.com",
+        "https://www.anchorpointfishing.com",
+        # optional local dev
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -75,8 +88,8 @@ def normalize_scrape_result(result: Dict[str, Any]) -> Dict[str, Any]:
     Keeps timestamp_utc internally for caching freshness.
     """
     out = dict(result or {})
-    out["timestamp"] = date.today().isoformat()          # <--- DATE ONLY (no time)
-    out["timestamp_utc"] = datetime.utcnow().isoformat() # <--- for cache freshness
+    out["timestamp"] = date.today().isoformat()          # DATE ONLY (no time)
+    out["timestamp_utc"] = datetime.utcnow().isoformat() # for cache freshness
     if "lakes" not in out:
         out["lakes"] = []
     return out
@@ -114,7 +127,7 @@ def increment_visits() -> int:
     except Exception:
         data["count"] = VISITS_START + 1
     save_visits(data)
-    return data["count"]
+    return int(data["count"])
 
 # -----------------------------
 # Routes
@@ -123,7 +136,7 @@ def increment_visits() -> int:
 def root():
     return {
         "message": "Anchor Point API is running",
-        "endpoints": ["/lakes", "/refresh", "/visits", "/visits/count"],
+        "endpoints": ["/lakes", "/refresh", "/visits", "/visits/count", "/sponsors"],
         "cache_hours": CACHE_HOURS,
     }
 
@@ -185,23 +198,18 @@ def visits():
 
 @app.get("/visits/count")
 def visits_count():
-     return load_visits()
     """
     Returns the counter WITHOUT incrementing.
     Useful for testing / admin display.
     """
     return load_visits()
-from fastapi.middleware.cors import CORSMiddleware
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://anchorpointfishing.com",
-        "https://www.anchorpointfishing.com",
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.get("/sponsors")
+def sponsors():
+    """
+    Stub endpoint so your frontend doesn't 404.
+    Replace with your real sponsor store/logic when ready.
+    """
+    # Return an empty list (your frontend already handles "no sponsors" gracefully)
+    return []
