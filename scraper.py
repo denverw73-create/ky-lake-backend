@@ -128,7 +128,7 @@ def scrape_wolf_creek_cumberland():
 # ---------------------------
 def scrape_lakes():
     try:
-        resp = requests.get(USACE_URL, headers=HEADERS, timeout=12)
+        resp = requests.get(USACE_URL, headers=HEADERS, timeout=12, verify=False)
         resp.raise_for_status()
     except Exception as e:
         return {"error": True, "message": str(e), "lakes": []}
